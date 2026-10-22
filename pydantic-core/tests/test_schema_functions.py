@@ -243,6 +243,11 @@ all_schema_functions = [
         args(MyModel, {'type': 'int'}),
         {'type': 'model', 'cls': MyModel, 'schema': {'type': 'int'}},
     ),
+    (
+        core_schema.model_custom_init_schema,
+        args(MyModel, {'type': 'int'}),
+        {'type': 'model-custom-init', 'cls': MyModel, 'schema': {'type': 'int'}},
+    ),
     (core_schema.arguments_parameter, args('foo', {'type': 'int'}), {'name': 'foo', 'schema': {'type': 'int'}}),
     (
         core_schema.arguments_schema,

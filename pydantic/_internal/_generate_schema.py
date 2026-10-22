@@ -974,6 +974,10 @@ class GenerateSchema:
 
                 schema = self._apply_model_serializers(model_schema, decorators.model_serializers.values())
                 schema = apply_model_validators(schema, model_validators, 'outer')
+                # Custom `__init__` must run outside outer model validators. `RootModel` keeps its
+                # own constructor contract and is not wrapped.
+                if not cls.__pydantic_root_model__ and getattr(cls, '__pydantic_custom_init__', False):
+                    schema = core_schema.model_custom_init_schema(cls, schema)
                 return self.defs.create_definition_reference_schema(schema)
 
     def _resolve_self_type(self, obj: Any) -> Any:

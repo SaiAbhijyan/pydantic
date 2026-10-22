@@ -463,6 +463,11 @@ class GenerateJsonSchema:
             # the definitions cache lookup, so that the JSON Schema is cached under the mode it was generated with:
             with self._config_wrapper_stack.push(_get_class_config(schema)):  # pyright: ignore[reportArgumentType]
                 return self._generate_inner(schema)
+        if schema['type'] == 'model-custom-init':
+            # Same config push as `'model'`: the ref lives on this wrapper, outside the model node.
+            config = cast('type[BaseModel]', cast('core_schema.ModelCustomInitSchema', schema)['cls']).model_config
+            with self._config_wrapper_stack.push(config):
+                return self._generate_inner(schema)
         return self._generate_inner(schema)
 
     def _generate_inner(self, schema: CoreSchemaOrField) -> JsonSchemaValue:  # noqa: C901
@@ -1779,6 +1784,19 @@ class GenerateJsonSchema:
 
         return json_schema
 
+    def model_custom_init_schema(self, schema: core_schema.ModelCustomInitSchema) -> JsonSchemaValue:
+        """Generates a JSON schema for a `model-custom-init` wrapper.
+
+        The wrapper only changes how validation starts. The JSON schema is the inner schema.
+
+        Args:
+            schema: The core schema.
+
+        Returns:
+            The generated JSON schema.
+        """
+        return self.generate_inner(schema['schema'])
+
     def _update_class_schema(self, json_schema: JsonSchemaValue, cls: type[Any], config: ConfigDict) -> None:
         """Update json_schema with the following, extracted from `config` and `cls`:
 
@@ -2408,6 +2426,8 @@ class GenerateJsonSchema:
             if schema['type'] == 'missing-sentinel' and (inner_schema := schema.get('schema')) is not None:
                 return self.field_title_should_be_set(inner_schema)
             if _core_utils.is_function_with_inner_schema(schema):
+                return self.field_title_should_be_set(schema['schema'])
+            if schema['type'] == 'model-custom-init':
                 return self.field_title_should_be_set(schema['schema'])
             if schema['type'] == 'definition-ref':
                 # Referenced schemas should not have titles set for the same reason

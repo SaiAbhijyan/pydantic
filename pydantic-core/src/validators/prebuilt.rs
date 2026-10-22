@@ -29,9 +29,13 @@ impl PrebuiltValidator {
                     Err(_) => return Ok(None),
                 },
             };
+            // Reusing the class validator would pull outer wrappers back into the inner `model`
+            // node (function-after/wrap, or `model-custom-init` around those).
             if matches!(
                 schema_validator.get().validator.as_ref(),
-                CombinedValidator::FunctionWrap(_) | CombinedValidator::FunctionAfter(_)
+                CombinedValidator::FunctionWrap(_)
+                    | CombinedValidator::FunctionAfter(_)
+                    | CombinedValidator::ModelCustomInit(_)
             ) {
                 return Ok(None);
             }

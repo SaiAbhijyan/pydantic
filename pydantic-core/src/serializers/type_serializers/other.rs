@@ -31,6 +31,22 @@ impl BuildSerializer for ChainBuilder {
     }
 }
 
+pub struct ModelCustomInitBuilder;
+
+impl BuildSerializer for ModelCustomInitBuilder {
+    const EXPECTED_TYPE: &'static str = "model-custom-init";
+
+    fn build(
+        schema: &Bound<'_, PyDict>,
+        config: Option<&Bound<'_, PyDict>>,
+        definitions: &mut DefinitionsBuilder<Arc<CombinedSerializer>>,
+    ) -> PyResult<Arc<CombinedSerializer>> {
+        // Validation-only wrapper. Serialize with the inner schema, which carries model serializers.
+        let sub_schema = schema.get_as_req(intern!(schema.py(), "schema"))?;
+        CombinedSerializer::build(&sub_schema, config, definitions)
+    }
+}
+
 pub struct CustomErrorBuilder;
 
 impl BuildSerializer for CustomErrorBuilder {

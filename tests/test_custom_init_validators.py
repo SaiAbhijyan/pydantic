@@ -10,11 +10,11 @@ wrap handler is invoked twice while ``self_instance`` is still set.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
-from pydantic import BaseModel, ValidatorFunctionWrapHandler, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidatorFunctionWrapHandler, model_validator
 
 
 def _model_with_custom_init(mode: str) -> tuple[type[BaseModel], list[str]]:
@@ -242,3 +242,98 @@ def test_subclass_of_custom_init_runs_validators_once(entrypoint: str) -> None:
             model = Parent.model_validate({'item': {'x': '1'}}).item
 
     _assert_once(model)
+
+
+@pytest.mark.parametrize('mode', ['before', 'after', 'wrap'])
+@pytest.mark.parametrize('entrypoint', ['model_validate_strings', 'type_adapter'])
+def test_root_custom_init_strings_and_type_adapter(mode: str, entrypoint: str) -> None:
+    """``model_validate_strings`` and ``TypeAdapter.validate_python`` run init and validators once."""
+    Model, calls = _model_with_custom_init(mode)
+
+    if entrypoint == 'model_validate_strings':
+        model = Model.model_validate_strings({'x': '1'})
+    else:
+        model = TypeAdapter(Model).validate_python({'x': '1'})
+
+    _assert_ran_once(model, calls)
+    assert model.model_dump() == {'x': 1, 'passes': 1}
+
+
+def test_from_attributes_does_not_call_custom_init() -> None:
+    """Objects are not dict-like, so custom ``__init__`` stays unused and validators run once."""
+    calls: list[str] = []
+
+    class Model(BaseModel):
+        model_config = ConfigDict(from_attributes=True)
+
+        x: int
+
+        def __init__(self, **data: Any) -> None:
+            calls.append('init')
+            super().__init__(**data)
+
+        @model_validator(mode='after')
+        def _after(self) -> Model:
+            calls.append('after')
+            return self
+
+    class Source:
+        x = '1'
+
+    model = Model.model_validate(Source())
+    assert calls == ['after']
+    assert model.x == 1
+    assert model.model_dump() == {'x': 1}
+
+    calls.clear()
+    model = TypeAdapter(Model).validate_python(Source())
+    assert calls == ['after']
+    assert model.x == 1
+
+
+def test_discriminated_union_custom_init_runs_once() -> None:
+    calls: list[str] = []
+
+    class A(BaseModel):
+        kind: Literal['a']
+        x: int
+
+        def __init__(self, **data: Any) -> None:
+            calls.append('A.init')
+            super().__init__(**data)
+
+        @model_validator(mode='after')
+        def _after(self) -> A:
+            calls.append('A.after')
+            return self
+
+    class B(BaseModel):
+        kind: Literal['b']
+        x: int
+
+    class Parent(BaseModel):
+        item: A | B = Field(discriminator='kind')
+
+    model = Parent.model_validate({'item': {'kind': 'a', 'x': '1'}})
+    assert isinstance(model.item, A)
+    assert model.item.x == 1
+    assert calls == ['A.init', 'A.after']
+    assert model.model_dump() == {'item': {'kind': 'a', 'x': 1}}
+
+
+def test_custom_init_json_schema_matches_model_fields() -> None:
+    class Plain(BaseModel):
+        x: int
+
+    class Custom(BaseModel):
+        x: int
+
+        def __init__(self, **data: Any) -> None:
+            super().__init__(**data)
+
+    plain = Plain.model_json_schema()
+    custom = Custom.model_json_schema()
+    assert custom['properties'] == plain['properties']
+    assert custom['required'] == plain['required']
+    assert custom['title'] == 'Custom'
+    assert custom['type'] == 'object'

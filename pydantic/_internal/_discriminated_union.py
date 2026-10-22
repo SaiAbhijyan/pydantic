@@ -269,6 +269,8 @@ class _ApplyInferredDiscriminator:
         elif choice['type'] == 'nullable':
             self._should_be_nullable = True
             self._handle_choice(choice['schema'])  # unwrap the nullable schema
+        elif choice['type'] == 'model-custom-init':
+            self._handle_choice(choice['schema'])
         elif choice['type'] == 'missing-sentinel':
             self._should_allow_missing = True
             if (inner_schema := choice.get('schema')) is not None:
@@ -329,6 +331,9 @@ class _ApplyInferredDiscriminator:
             return self._infer_discriminator_values_for_choice(choice['schema'], source_name=source_name)
 
         elif _core_utils.is_function_with_inner_schema(choice):
+            return self._infer_discriminator_values_for_choice(choice['schema'], source_name=source_name)
+
+        elif choice['type'] == 'model-custom-init':
             return self._infer_discriminator_values_for_choice(choice['schema'], source_name=source_name)
 
         elif choice['type'] == 'lax-or-strict':

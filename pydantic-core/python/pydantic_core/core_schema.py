@@ -12,7 +12,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from fractions import Fraction
 from re import Pattern
-from typing import TYPE_CHECKING, Any, Literal, Union, overload
+from typing import TYPE_CHECKING, Any, Literal, Union, cast, overload
 
 from typing_extensions import TypeVar, deprecated
 
@@ -3827,6 +3827,49 @@ def model_schema(
     )
 
 
+class ModelCustomInitSchema(TypedDict, total=False):
+    type: Required[Literal['model-custom-init']]
+    cls: Required[type[Any]]
+    schema: Required[CoreSchema]
+    ref: str
+    metadata: dict[str, Any]
+    serialization: SerSchema
+
+
+def model_custom_init_schema(
+    cls: type[Any],
+    schema: CoreSchema,
+    *,
+    ref: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    serialization: SerSchema | None = None,
+) -> ModelCustomInitSchema:
+    """Call a custom ``__init__`` outside the wrapped model schema.
+
+    When ``self_instance`` is unset and the input is dict-like, pydantic-core calls
+    ``cls(**data)`` and returns. ``BaseModel.__init__`` validates again with
+    ``self_instance`` set, and the wrapped schema — including outer model validators —
+    runs once. Other inputs (instances, ``from_attributes``) run the wrapped schema
+    directly. The reference, if any, is moved onto this node so it stays outermost.
+
+    Args:
+        cls: The model class whose ``__init__`` is called.
+        schema: The model schema, including outer model validators.
+        ref: Optional unique identifier of the schema, used to reference the schema in other places.
+        metadata: Any other information you want to include with the schema, not used by pydantic-core.
+        serialization: Custom serialization schema.
+    """
+    schema_ref = cast('dict[str, Any]', schema).pop('ref', None)
+    return _dict_not_none(
+        type='model-custom-init',
+        cls=cls,
+        schema=schema,
+        ref=ref if ref is not None else schema_ref,
+        metadata=metadata,
+        serialization=serialization,
+    )
+
+
 class DataclassField(TypedDict, total=False):
     type: Required[Literal['dataclass-field']]
     name: Required[str]
@@ -4805,6 +4848,7 @@ if not MYPY:
         | TypedDictSchema
         | ModelFieldsSchema
         | ModelSchema
+        | ModelCustomInitSchema
         | DataclassArgsSchema
         | DataclassSchema
         | NamedTupleSchema
@@ -4871,6 +4915,7 @@ CoreSchemaType: TypeAlias = Literal[
     'typed-dict',
     'model-fields',
     'model',
+    'model-custom-init',
     'dataclass-args',
     'dataclass',
     'named-tuple',

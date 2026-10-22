@@ -410,3 +410,71 @@ where
         )
     }
 }
+
+/// Calls `cls(**kwargs)` outside model validators when the input is dict-like and
+/// `self_instance` is unset. `BaseModel.__init__` re-enters with `self_instance` set,
+/// and the wrapped schema (validators included) then runs once.
+#[derive(Debug)]
+pub struct ModelCustomInitValidator {
+    class: Py<PyType>,
+    validator: Arc<CombinedValidator>,
+}
+
+impl BuildValidator for ModelCustomInitValidator {
+    const EXPECTED_TYPE: &'static str = "model-custom-init";
+
+    fn build(
+        schema: &Bound<'_, PyDict>,
+        config: Option<&Bound<'_, PyDict>>,
+        definitions: &mut DefinitionsBuilder<Arc<CombinedValidator>>,
+    ) -> PyResult<Arc<CombinedValidator>> {
+        let py = schema.py();
+        let class: Bound<'_, PyType> = schema.get_as_req(intern!(py, "cls"))?;
+        let sub_schema = schema.get_as_req(intern!(py, "schema"))?;
+        let validator = build_validator(&sub_schema, config, definitions)?;
+        Ok(CombinedValidator::ModelCustomInit(Self {
+            class: class.into(),
+            validator,
+        })
+        .into())
+    }
+}
+
+impl_py_gc_traverse!(ModelCustomInitValidator { class, validator });
+
+impl Validator for ModelCustomInitValidator {
+    fn validate<'py>(
+        &self,
+        py: Python<'py>,
+        input: &(impl Input<'py> + ?Sized),
+        state: &mut ValidationState<'_, 'py>,
+    ) -> ValResult<Py<PyAny>> {
+        // Dict-like input and no instance yet: this is the original `model_validate` / JSON / strings
+        // entry. Delegate to the custom `__init__`. It calls back with `self_instance` set.
+        if state.self_instance.is_none()
+            && let Some(kwargs) = input.as_kwargs(py)
+        {
+            return self
+                .class
+                .call(py, (), Some(&kwargs))
+                .map_err(|e| convert_err(py, e, input));
+        }
+        self.validator.validate(py, input, state)
+    }
+
+    fn validate_assignment<'py>(
+        &self,
+        py: Python<'py>,
+        obj: &Bound<'py, PyAny>,
+        field_name: &PyBackedStr,
+        field_value: &Bound<'py, PyAny>,
+        state: &mut ValidationState<'_, 'py>,
+    ) -> ValResult<Py<PyAny>> {
+        self.validator
+            .validate_assignment(py, obj, field_name, field_value, state)
+    }
+
+    fn get_name(&self) -> &str {
+        Self::EXPECTED_TYPE
+    }
+}

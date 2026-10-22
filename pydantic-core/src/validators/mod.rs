@@ -579,6 +579,7 @@ fn build_validator_inner(
         nullable::NullableValidator,
         // model classes
         model::ModelValidator,
+        model::ModelCustomInitValidator,
         model_fields::ModelFieldsValidator,
         // dataclasses
         dataclass::DataclassArgsValidator,
@@ -753,6 +754,7 @@ pub enum CombinedValidator {
     Nullable(nullable::NullableValidator),
     // create new model classes
     Model(model::ModelValidator),
+    ModelCustomInit(model::ModelCustomInitValidator),
     ModelFields(model_fields::ModelFieldsValidator),
     // dataclasses
     DataclassArgs(dataclass::DataclassArgsValidator),

@@ -103,6 +103,7 @@ combined_serializer! {
     find_only: {
         super::type_serializers::other::ChainBuilder;
         super::type_serializers::other::CustomErrorBuilder;
+        super::type_serializers::other::ModelCustomInitBuilder;
         super::type_serializers::other::CallBuilder;
         super::type_serializers::other::LaxOrStrictBuilder;
         super::type_serializers::other::ArgumentsBuilder;
